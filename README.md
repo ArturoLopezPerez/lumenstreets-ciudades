@@ -5,7 +5,9 @@ Zonas de la maqueta 3D de [Lumenstreets](https://github.com/ArturoLopezPerez/App
 Este repositorio no contiene código: solo los datos procesados, publicados como archivos de una *release*.
 
 - `zonas.json`: índice (versión, ciudad y tamaño de cada zona).
-- `frankfurt-<E>_<N>.bin`: una zona de 1 km × 1 km (cuadrícula UTM 32N; `E` y `N` son los kilómetros de su esquina suroeste). Formato propio LMQ2 (comprimido con LZ4): edificios con tejados reales, relieve, calles, parques, agua y rótulos.
+- `frankfurt-<E>_<N>.bin`: una zona de 1 km × 1 km (cuadrícula UTM 32N; `E` y `N` son los kilómetros de su esquina suroeste) con todo el detalle. Formato propio LMQ2 (comprimido con LZ4): edificios con tejados reales, relieve, calles según su acceso, agua, parques, árboles y rótulos.
+- `frankfurt-<E>_<N>-m.bin`: la misma zona en nivel medio (edificios simplificados, suelo a 20 m), para verla a entre 0,45 y 1,8 km.
+- `frankfurt-lejos.bin`: la ciudad entera en la capa lejana (suelo a 100 m con el plano de clases a 10 m por píxel y los edificios altos o grandes), para verla siempre.
 
 ## Procedencia y licencias
 
