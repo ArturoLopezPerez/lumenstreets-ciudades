@@ -1,0 +1,68 @@
+# Una sola rama larga: main. Al cerrarse un PR (fusionado o no) se borra su rama, y cada noche se borran las que
+# sobran: las de PR cerrados y las que no tienen PR ni cambios desde hace 3 días. Las de un PR abierto no se tocan.
+name: Limpiar ramas
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: limpiar-ramas
+  cancel-in-progress: false
+
+jobs:
+  al-cerrar:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref != 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Borrar la rama del PR cerrado
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RAMA: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          # Otra PR abierta desde la misma rama: se deja.
+          if [ -n "$(gh pr list -R "$REPO" --head "$RAMA" --state open --json number -q '.[].number')" ]; then
+            echo "La rama $RAMA tiene otro PR abierto: se queda"; exit 0
+          fi
+          gh api -X DELETE "repos/$REPO/git/refs/heads/$RAMA" && echo "Borrada $RAMA" || echo "No se pudo borrar $RAMA (ya no existe o está protegida)"
+
+  cada-noche:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Borrar las ramas que sobran
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          abiertas=$(gh pr list -R "$REPO" --state open --limit 1000 --json headRefName -q '.[].headRefName')
+          limite=$(date -d '3 days ago' +%s)
+          borradas=0; quedan=0
+          while read -r b; do
+            [ -z "$b" ] || [ "$b" = main ] && continue
+            if grep -qxF -- "$b" <<<"$abiertas"; then quedan=$((quedan+1)); continue; fi
+            estado=$(gh pr list -R "$REPO" --head "$b" --state all --limit 1 --json state -q '.[0].state // ""')
+            if [ -z "$estado" ]; then
+              fecha=$(gh api "repos/$REPO/commits/$(printf '%s' "$b" | jq -sRr @uri)" -q .commit.committer.date)
+              if [ "$(date -d "$fecha" +%s)" -gt "$limite" ]; then quedan=$((quedan+1)); echo "Se queda $b (sin PR, cambios recientes)"; continue; fi
+            fi
+            if gh api -X DELETE "repos/$REPO/git/refs/heads/$b" >/dev/null; then
+              borradas=$((borradas+1)); echo "Borrada $b (${estado:-sin PR, sin cambios en 3 días})"
+            else
+              echo "::warning::No se pudo borrar $b"
+            fi
+          done < <(gh api --paginate "repos/$REPO/branches?per_page=100" -q '.[].name')
+          echo "Borradas: $borradas · se quedan (PR abierto o cambios recientes): $quedan"
+          echo "Borradas: $borradas · se quedan (PR abierto o cambios recientes): $quedan" >> "$GITHUB_STEP_SUMMARY"
